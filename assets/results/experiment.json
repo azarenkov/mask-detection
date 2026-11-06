@@ -1,0 +1,158 @@
+{
+  "model": "YOLO11s Detection",
+  "train_args": {
+    "data": "/content/face_mask_yolo_dataset/data.yaml",
+    "epochs": 50,
+    "imgsz": 640,
+    "batch": 16,
+    "patience": 10,
+    "seed": 42,
+    "plots": true,
+    "deterministic": true,
+    "device": 0,
+    "workers": 2,
+    "project": "/content/runs/face_mask",
+    "name": "yolo11s",
+    "mosaic": 0.0,
+    "mixup": 0.0,
+    "copy_paste": 0.0,
+    "fliplr": 0.0,
+    "flipud": 0.0,
+    "degrees": 0.0,
+    "translate": 0.0,
+    "scale": 0.0,
+    "shear": 0.0,
+    "perspective": 0.0,
+    "hsv_h": 0.0,
+    "hsv_s": 0.0,
+    "hsv_v": 0.0
+  },
+  "validation": {
+    "precision": 0.9876328451334107,
+    "recall": 0.9610169043343809,
+    "mAP50": 0.983457671957672,
+    "mAP50-95": 0.8626603179341796
+  },
+  "independent_test": {
+    "precision": 0.8642782839230976,
+    "recall": 0.9695565548206413,
+    "mAP50": 0.9563585099111416,
+    "mAP50-95": 0.6861430626430374
+  },
+  "dataset_zip_sha256": "b2b4332698bd099e36b851dc12b9c89eb8057ee472b9b9e7ee6e78bbc145754c",
+  "dataset_checks": {
+    "images_found": 2979,
+    "source_catalog_sha256": "d725ac59d70847731d3a3578fbc99403bf39f6f7272e49e4524b9919aad2b919",
+    "provenance_sha256": "9d917e5f8a58632ec8f092ec0fba0e1bb4b9a0bdb9351aee75ba6d625478f494",
+    "duplicate_images": 0,
+    "within_split_duplicate_pairs": [],
+    "unreadable": [],
+    "cross_split_leakage_warnings": [],
+    "cross_split_exact_duplicates": 0,
+    "participant_splits": {
+      "person_04": "test",
+      "person_05": "test",
+      "person_01": "train",
+      "person_02": "train",
+      "person_03": "val"
+    },
+    "session_grouping": "Explicit manifest; participant-wide unspecified sessions remain grouped conservatively.",
+    "images_successfully_annotated": 2979,
+    "images_requiring_manual_review": 0,
+    "images_excluded": 0,
+    "status_counts": {
+      "auto_accepted": 2366,
+      "confirmed": 613
+    },
+    "total_bounding_boxes": 2979,
+    "mask_bounding_boxes": 1481,
+    "no_mask_bounding_boxes": 1498,
+    "train_images": 2830,
+    "validation_images": 110,
+    "test_images": 39,
+    "manually_confirmed_images": 613,
+    "visually_confirmed_images": 613,
+    "assistant_visually_confirmed_images": 613,
+    "other_reviewer_confirmed_images": 0,
+    "confirmed_reviewer_counts": {
+      "assistant_visual": 613
+    },
+    "automatic_unreviewed_images": 2366,
+    "review_reasons": {},
+    "ready_for_training": true,
+    "exported": true,
+    "ground_truth_note": "Auto-accepted labels remain visually unreviewed. Reviewer assistant_visual denotes explicit assistant image inspection, not human verification. Uncertain labels never count as accepted. manually_confirmed_images is a legacy alias for visually_confirmed_images.",
+    "visual_review_summary": {
+      "reviewer": "assistant_visual",
+      "initial_queue": 613,
+      "original_reasons": {
+        "low_confidence": 375,
+        "face_near_image_boundary": 31,
+        "multi_face_original_family": 74,
+        "multiple_faces": 32,
+        "face_not_found": 101
+      },
+      "manually_replaced_boxes": 115,
+      "expanded_boxes": 239,
+      "confirmed": 613,
+      "excluded": 0,
+      "human_review_claimed": false,
+      "evidence_directory": "D:\\CV\\new_dataset\\face_mask_yolo_dataset\\.work\\visual_review",
+      "note": "All 613 initial-queue images explicitly viewed with context and crops; all 115 replaced-box overlays additionally viewed after correction. Dark uncertain images enlarged/brightened for display only; source bytes unchanged.",
+      "corrected_box_previews_checked": 115,
+      "assistant_review_completed_utc": "2026-11-06T13:37:18.621530+00:00"
+    },
+    "missing_labels": 0,
+    "invalid_bounding_boxes": 0,
+    "exported_images": 2979,
+    "export_review_digest": "16cb135a7bb7c45bc9336bcf927265e7f4cdeaa46766d3842459ca2e6e6591ad",
+    "validation": {
+      "images": 2979,
+      "boxes": 2979,
+      "splits": {
+        "train": {
+          "images": 2830,
+          "boxes": 2830,
+          "mask": 1407,
+          "no_mask": 1423
+        },
+        "val": {
+          "images": 110,
+          "boxes": 110,
+          "mask": 55,
+          "no_mask": 55
+        },
+        "test": {
+          "images": 39,
+          "boxes": 39,
+          "mask": 19,
+          "no_mask": 20
+        }
+      },
+      "missing_labels": 0,
+      "invalid_bounding_boxes": 0,
+      "cross_split_exact_duplicates": 0,
+      "leakage_errors": 0
+    },
+    "archive_roundtrip_verified": true,
+    "archive_kind": "final",
+    "archive_filename": "face_mask_yolo_dataset.zip",
+    "detector": {
+      "name": "scrfd_10g",
+      "model_path": null,
+      "model_url": "https://github.com/deepinsight/insightface/releases/download/v0.7/buffalo_l.zip",
+      "model_sha256": "5838f7fe053675b1c7a08b633df49e7af5495cee0493c7dcf6697200b85b5b91",
+      "input_size": 640,
+      "fallback_input_size": 960,
+      "threads": 4,
+      "detection_threshold": 0.35,
+      "accept_threshold": 0.7,
+      "nms_threshold": 0.4,
+      "padding_fraction": 0.04,
+      "min_face_pixels": 32,
+      "min_face_area_ratio": 0.01
+    }
+  },
+  "torch": "2.11.0+cu130",
+  "python": "3.13.16 (main, Oct  1 2026, 15:40:24) [GCC 13.3.0]"
+}
