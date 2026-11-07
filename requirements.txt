@@ -2,5 +2,6 @@ ultralytics>=8.3
 gradio>=6.0
 opencv-python-headless>=4.9
 numpy
-# Optional — real MedSAM2 backend (otherwise GrabCut fallback is used):
-# sam2 @ git+https://github.com/bowang-lab/MedSAM2.git
+# Segmentation additionally requires the official MedSAM2 checkout installed
+# into this same environment: python -m pip install -e ./MedSAM2
+# See README.md for CUDA PyTorch installation and checkpoint download.

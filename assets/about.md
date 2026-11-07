@@ -5,10 +5,9 @@
 | Component | Model | Role |
 |---|---|---|
 | Detection | YOLO11s (fine-tuned, `models/best.pt`) | Finds faces and classifies them as `mask` / `no_mask` |
-| Segmentation | MedSAM2 (box-prompted, GrabCut fallback) | Outlines the mask region inside the detected face |
-| PSA video | SadTalker | Talking-head educational video about wearing masks |
+| Segmentation | MedSAM2 (box-prompted) | Predicts the mask region inside the detected face; reports loading/inference errors explicitly |
 
-**Pipeline:** image / webcam → YOLO11s → face boxes → lower-face box prompt → MedSAM2 → overlay.
+**Pipeline:** YOLO11s detects faces in the uploaded image or webcam photo. MedSAM2 uses each lower-face box to predict a mask, which is displayed as an overlay.
 
 #### Comparison with Assignment 1
 
@@ -19,5 +18,5 @@
 | Test precision / recall | _fill in_ | 0.864 / 0.970 |
 
 #### Ethics
-All participants gave consent for their photos and for the PSA video. Faces from the test participants
+All participants gave consent for their photos. Faces from the test participants
 were never used for training.

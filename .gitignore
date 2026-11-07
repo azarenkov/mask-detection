@@ -5,3 +5,7 @@ __pycache__/
 .gradio/
 checkpoints/
 MedSAM2/
+.tools/
+.runtime/
+.cache/
+.local/

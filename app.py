@@ -5,25 +5,36 @@ Run:  python app.py   →  http://127.0.0.1:7860
 
 from __future__ import annotations
 
+import hashlib
 import json
+import os
 import time
 from pathlib import Path
+
+# This laptop's display freezes under CUDA work. Keep GPU use opt-in and
+# hide it before importing libraries that may automatically select CUDA.
+APP_DEVICE = os.environ.get("MASKVISION_DEVICE", "cpu").strip().lower()
+if APP_DEVICE == "cpu":
+    os.environ["CUDA_VISIBLE_DEVICES"] = "-1"
+    os.environ.setdefault("OMP_NUM_THREADS", "2")
+    os.environ.setdefault("MKL_NUM_THREADS", "2")
 
 import cv2
 import gradio as gr
 import numpy as np
 from ultralytics import YOLO
 
-from segmentation.medsam2_inference import MedSAM2Segmenter, mask_region_box
+from segmentation.medsam2_inference import MedSAM2Error, MedSAM2Segmenter, mask_region_box
 
 ROOT = Path(__file__).parent
 MODEL_PATH = ROOT / "models" / "best.pt"
 RESULTS_DIR = ROOT / "assets" / "results"
-PSA_VIDEO = ROOT / "assets" / "psa_video.mp4"
 
 CLASS_COLORS = {"mask": (34, 197, 94), "no_mask": (239, 68, 68)}  # RGB
 CLASS_LABELS = {"mask": "Mask", "no_mask": "No Mask"}
 
+with MODEL_PATH.open("rb") as checkpoint_file:
+    MODEL_SHA256 = hashlib.file_digest(checkpoint_file, "sha256").hexdigest()
 model = YOLO(str(MODEL_PATH))
 segmenter = MedSAM2Segmenter()
 
@@ -33,7 +44,8 @@ def detect(image: np.ndarray, conf: float):
     start = time.perf_counter()
     # Ultralytics expects numpy images in BGR; Gradio provides RGB.
     bgr = cv2.cvtColor(image, cv2.COLOR_RGB2BGR)
-    result = model.predict(bgr, conf=conf, imgsz=640, agnostic_nms=True, verbose=False)[0]
+    result = model.predict(bgr, conf=conf, imgsz=640, device=APP_DEVICE,
+                           agnostic_nms=True, verbose=False)[0]
     elapsed_ms = (time.perf_counter() - start) * 1000
     detections = []
     for box, cls, score in zip(result.boxes.xyxy.cpu().numpy(),
@@ -85,15 +97,40 @@ def run_detection(image, conf):
     return draw_detections(image, detections), stats_html(detections, total_ms, model_ms), table
 
 
+def segmentation_backend_note() -> str:
+    note = f"**Backend:** {segmenter.backend}"
+    if not segmenter.available:
+        note += f"\n\n**Segmentation is disabled.** {segmenter.load_error}"
+    return note
+
+
+def segmentation_not_run(message: str, image=None):
+    # Clear any previous overlay, success counters and rows on a failed request.
+    html = '<div class="stats">' + stat_card("Segmentation", "Not run") + "</div>"
+    return image, html, segmentation_backend_note() + "\n\n" + message, []
+
+
 def run_segmentation(image, conf, include_no_mask):
     if image is None:
-        raise gr.Error("Upload an image or take a photo with the webcam first.")
+        return segmentation_not_run("Upload an image or take a photo with the webcam first.")
     image = image[..., :3]
     detections, _, _ = detect(image, conf)
     targets = [d for d in detections if d["class"] == "mask" or include_no_mask]
+    if not detections:
+        return segmentation_not_run(
+            "**YOLO did not detect any faces. Segmentation was not run.** "
+            "Try a clearer photo or lower the confidence threshold.", image)
+    if not targets:
+        return segmentation_not_run(
+            "**YOLO found faces, but none were classified as Mask. Segmentation was not run.** "
+            "To segment the lower face anyway, enable the 'No Mask' option.",
+            draw_detections(image, detections))
     boxes = [mask_region_box(d["box"], image.shape) for d in targets]
     start = time.perf_counter()
-    seg = segmenter.segment(image, boxes)
+    try:
+        seg = segmenter.segment(image, boxes)
+    except MedSAM2Error as exc:
+        return segmentation_not_run(f"**Segmentation failed. No result was produced.**\n\n{exc}")
     seg_ms = (time.perf_counter() - start) * 1000
 
     rows = []
@@ -103,19 +140,25 @@ def run_segmentation(image, conf, include_no_mask):
         rows.append([CLASS_LABELS[d["class"]], round(d["conf"], 3), int(m.sum()),
                      f"{100 * m.sum() / face_area:.1f}%"])
 
+    n_regions = sum(bool(m.any()) for m in seg.masks)
     backend_note = f"**Backend:** {seg.backend}"
-    if segmenter.load_error:
-        backend_note += f"  \n⚠️ MedSAM2 could not be loaded, using fallback: `{segmenter.load_error}`"
-    if not targets:
-        backend_note += "  \nNo faces with a mask were found — nothing to segment."
-    html = '<div class="stats">' + stat_card("Segmented regions", str(len(seg.masks))) + \
+    if n_regions:
+        backend_note += "\n\nMedSAM2 inference completed. The predicted mask is highlighted below."
+    else:
+        backend_note += "\n\nMedSAM2 returned empty masks. No mask region was found."
+    html = '<div class="stats">' + stat_card("Segmented regions", str(n_regions)) + \
         stat_card("Segmentation time", f"{seg_ms:.0f} ms", seg.backend) + "</div>"
     return draw_detections(seg.overlay, detections), html, backend_note, rows
 
 
 def load_experiment() -> dict:
     path = RESULTS_DIR / "experiment.json"
-    return json.loads(path.read_text()) if path.exists() else {}
+    if not path.exists():
+        return {}
+    exp = json.loads(path.read_text(encoding="utf-8"))
+    provenance = RESULTS_DIR / "model_provenance.json"
+    exp["provenance"] = json.loads(provenance.read_text(encoding="utf-8")) if provenance.exists() else {}
+    return exp
 
 
 def metrics_markdown(exp: dict) -> str:
@@ -124,8 +167,22 @@ def metrics_markdown(exp: dict) -> str:
     v, t = exp["validation"], exp["independent_test"]
     split = exp["dataset_checks"]["validation"]["splits"]
     args = exp["train_args"]
+    provenance = exp.get("provenance", {})
+    variant = provenance.get("variant", "Unverified")
+    tag = variant.split("_", 1)[0]
+    verified = provenance.get("checkpoint_sha256") == MODEL_SHA256 and provenance.get("metrics_verified")
+    if verified:
+        identity = f"**Active YOLO model: {provenance['display_name']} (`{variant}`).** " \
+                   "These metrics and the figures below describe the weights used by this app."
+    else:
+        identity = "**Active YOLO weights are not verified against the saved metrics.** " \
+                   f"The table and figures describe the recorded model `{variant}`, not a verified active checkpoint."
+    completed = provenance.get("epochs_completed", "not recorded")
+    variant_note = "Variant B (`B_flip_50`) is not loaded." if verified and variant == "A_no_flip" else ""
     return f"""
-| Metric | Validation (person_03) | Independent test (person_04, person_05) |
+{identity}
+
+| Metric | {tag}: validation (person_03) | {tag}: independent test (person_04, person_05) |
 |---|---|---|
 | Precision | {v['precision']:.3f} | {t['precision']:.3f} |
 | Recall | {v['recall']:.3f} | {t['recall']:.3f} |
@@ -136,9 +193,13 @@ def metrics_markdown(exp: dict) -> str:
 train {split['train']['images']} / val {split['val']['images']} / test {split['test']['images']}.
 Splits are made **by participant**, so test faces were never seen in training.
 
-**Training:** YOLO11s, {args['epochs']} epochs (early-stopping patience {args['patience']}),
+**Training ({tag}):** YOLO11s, {completed} completed epochs (limit {args['epochs']}, early-stopping patience {args['patience']}),
 imgsz {args['imgsz']}, batch {args['batch']}, seed {args['seed']}, all augmentations disabled
-(mosaic, flips, HSV, scale = 0) — baseline for the ablation study.
+(mosaic, flips, HSV, scale = 0). {variant_note}
+
+**Limits:** the independent test contains only {split['test']['images']} images. These are YOLO detection
+metrics, not MedSAM2 segmentation accuracy. YOLO can incorrectly classify an unmasked face as Mask;
+MedSAM2 follows the detected boxes and does not independently verify that a physical mask is present.
 """
 
 
@@ -156,6 +217,7 @@ CSS = """
 .stat-title {font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.05em; opacity: 0.7;}
 .stat-value {font-size: 1.6rem; font-weight: 700; margin-top: 2px;}
 .stat-hint {font-size: 0.75rem; opacity: 0.6;}
+[data-testid="upload-icon"], [aria-label="Empty value"] .icon {display: none !important;}
 """
 
 HERO = """
@@ -164,7 +226,7 @@ HERO = """
   <p>AI-powered Face Mask Detection &amp; Segmentation</p>
   <div class="chips">
     <span class="chip">YOLO11s detection</span><span class="chip">MedSAM2 segmentation</span>
-    <span class="chip">SadTalker PSA video</span><span class="chip">Assignment 2</span>
+    <span class="chip">Assignment 2</span>
   </div>
 </div>
 """
@@ -193,8 +255,8 @@ def build_ui() -> gr.Blocks:
             det_in.upload(run_detection, [det_in, det_conf], [det_out, det_stats, det_table])
 
         with gr.Tab("Segmentation"):
-            gr.Markdown("YOLO11s finds the face → the lower part of the box (nose to chin) is passed as a "
-                        "**box prompt** to the segmentation model → the mask region is highlighted.")
+            gr.Markdown("YOLO11s detects the face. The lower part of its box (nose to chin) is used as a "
+                        "**box prompt** for MedSAM2, which predicts and highlights the mask region.")
             with gr.Row():
                 with gr.Column(scale=1):
                     seg_in = gr.Image(label="Upload an image or use webcam", sources=["upload", "webcam", "clipboard"], type="numpy")
@@ -204,34 +266,27 @@ def build_ui() -> gr.Blocks:
                 with gr.Column(scale=1):
                     seg_out = gr.Image(label="Segmentation result", interactive=False)
                     seg_stats = gr.HTML()
-                    seg_note = gr.Markdown(f"**Backend:** {segmenter.backend}")
+                    seg_note = gr.Markdown(segmentation_backend_note())
             seg_table = gr.Dataframe(headers=["Class", "Confidence", "Mask pixels", "Share of face box"],
                                      label="Segmented regions", interactive=False)
             seg_btn.click(run_segmentation, [seg_in, seg_conf, seg_all], [seg_out, seg_stats, seg_note, seg_table])
-
-        with gr.Tab("PSA Video"):
-            gr.Markdown("### Public-service announcement\nAn educational talking-head video generated with "
-                        "**SadTalker** from a single portrait (used with the participant's consent) and a recorded script.")
-            if PSA_VIDEO.exists():
-                gr.Video(str(PSA_VIDEO), label="PSA video", interactive=False)
-            else:
-                gr.Markdown("> ⚠️ `assets/psa_video.mp4` is not there yet. Generate it with SadTalker in Colab "
-                            "(see `psa/sadtalker_colab.md`) and put the file into `assets/`, then restart the app.")
+            seg_in.change(run_segmentation, [seg_in, seg_conf, seg_all], [seg_out, seg_stats, seg_note, seg_table])
 
         with gr.Tab("Performance"):
-            gr.Markdown("### YOLO11s results")
+            gr.Markdown("### YOLO11s performance")
             gr.Markdown(metrics_markdown(exp))
             with gr.Row():
                 for name, label in [("results.png", "Training curves"),
                                     ("test_BoxPR_curve.png", "Precision–Recall (test)"),
                                     ("test_confusion_matrix_normalized.png", "Confusion matrix (test)")]:
                     if (RESULTS_DIR / name).exists():
-                        gr.Image(str(RESULTS_DIR / name), label=label, interactive=False)
+                        tag = exp.get("provenance", {}).get("variant", "Recorded").split("_", 1)[0]
+                        gr.Image(str(RESULTS_DIR / name), label=f"{tag}: {label}", interactive=False)
 
         with gr.Tab("About"):
-            gr.Markdown((ROOT / "assets" / "about.md").read_text() if (ROOT / "assets" / "about.md").exists() else "")
+            gr.Markdown((ROOT / "assets" / "about.md").read_text(encoding="utf-8") if (ROOT / "assets" / "about.md").exists() else "")
     return demo
 
 
 if __name__ == "__main__":
-    build_ui().launch(css=CSS, theme=gr.themes.Soft(primary_hue="teal"))
+    build_ui().launch(css=CSS, theme=gr.themes.Soft(primary_hue="teal"), footer_links=[])

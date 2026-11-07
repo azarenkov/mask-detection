@@ -1,0 +1,16 @@
+{
+  "variant": "A_no_flip",
+  "display_name": "A (no horizontal flip)",
+  "checkpoint_path": "models/best.pt",
+  "checkpoint_sha256": "63d71d157f6b817dcc1acfd338d37b0be96ac84bc06ee85ee45e6f4490e20ea3",
+  "github_commit": "9ae1238b5b3517257716a583287ca704cdcf63c0",
+  "github_blob": "892aeee7884f94b687586e39789403baed2417e6",
+  "ablation_archive": "MaskVision_Ablation_20261107_072137_362959-20261107T083954Z-1-001.zip",
+  "ablation_entry": "MaskVision_Ablation_20261107_072137_362959/training/A_no_flip/weights/best.pt",
+  "ablation_checkpoint_sha256": "ed3958fc0c1f870e1ce45e822b9676066c0c11a41599b5caa2849d8d12824c30",
+  "matching_tensor_storages": 503,
+  "tensor_storage_fingerprint": "122a8cce5f273de01326b82dbf8e9124477fa932fe5a6c96319d38d57b5146cc",
+  "epochs_completed": 28,
+  "metrics_verified": true,
+  "note": "All indexed tensor-storage payloads match; checkpoint container metadata differs. No pickle was executed."
+}
